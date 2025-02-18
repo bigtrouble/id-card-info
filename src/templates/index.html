@@ -141,9 +141,6 @@ const app = Vue.createApp({
       let d = []
 
       let name = find(str, /姓名(.+)性别/);
-      if (name === '---') {
-        name = find(str, /^(.+)姓名/);
-      }
       d.push({type: '姓名', content: name})
 
       d.push({type: '性别', content: find(str, /性别([男女])/)})
