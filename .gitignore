@@ -169,3 +169,5 @@ cython_debug/
 
 # PyPI configuration file
 .pypirc
+/data/shape_predictor_68_face_landmarks.dat
+yolov5
