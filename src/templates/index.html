@@ -140,9 +140,8 @@ const app = Vue.createApp({
       console.log(str)
       let d = []
 
-      let name = find(str, /姓名(.+)性别/);
-      d.push({type: '姓名', content: name})
 
+      d.push({type: '姓名', content: find(str, /姓名(.+)性别/)})
       d.push({type: '性别', content: find(str, /性别([男女])/)})
 
       let ethnic = find(str, /民族(汉)/)
