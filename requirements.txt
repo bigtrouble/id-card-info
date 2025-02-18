@@ -1,0 +1,13 @@
+flask
+gevent
+numpy
+opencv-python-headless
+opencv-python
+paddlepaddle==2.5.2
+paddleocr
+boost
+cmake
+dlib
+onnx
+onnxruntime
+onnxruntime-gpu

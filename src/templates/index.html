@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html>
+
+  <head>
+    <meta charset="utf-8">
+    <title>ID card reader</title>
+    <style>
+      [v-cloak] {
+        display: none !important;
+      }
+      .wrapper {
+        padding: 20px;
+        position: relative;
+        height: 100vh;
+      }
+      .loader {
+        width: 50px;
+        aspect-ratio: 1;
+        border-radius: 50%;
+        background: 
+          radial-gradient(farthest-side,#ffa516 94%,#0000) top/8px 8px no-repeat,
+          conic-gradient(#0000 30%,#ffa516);
+        mask: radial-gradient(farthest-side,#0000 calc(100% - 8px),#000 0);
+        animation: l13 1s infinite linear;
+      }
+      @keyframes l13{ 
+        100%{transform: rotate(1turn)}
+      }
+    </style>
+  </head>
+
+  <body>
+    <div id="app" class="wrapper" v-cloak>
+
+      <Spin fix v-if="loading">
+        <div class="loader"><span></span></div>
+      </Spin>
+
+      <i-button type="primary" size="small" @click="onSelectImage">Select IDCard Image</i-button>
+      <div v-if="imageURL" style="display: flex; align-items: center;">
+        <img :src="imageURL" alt="Image preview" style="max-width: 400px; max-height: 400px; border: 1px solid #ccc; padding: 5px; margin-top: 20px; border-radius: 5px;">
+        <div style="display: flex; flex-direction: column; margin-left:30px;">
+          <span style="margin-bottom: 20px; font-weight: bold;">{{this.imageFile.name}}</span>
+          <Checkbox v-model="detectImageOrientation">Detect image orientation</Checkbox>
+          <Checkbox v-model="resultContainImages">Results contain images</Checkbox>
+          <i-button size="small" :disabled="!imageURL" @click="onUpload">Read IDCard Information</i-button>
+        </div>
+      </div>
+      <div v-if="result" style="margin-top: 20px;">
+        <i-table border size="small" :columns="columns" :data="data">
+          <template #content="{row}">
+            <div style="display: flex;">
+              <div v-if="row.type === '人像'" style="margin-top:10px; margin-bottom: 10px;">
+                <img :src="row.content" style="max-width: 100px; max-height: 100px;">
+              </div>
+              <div v-else-if="row.type === '身份证'" style="margin-top:10px; margin-bottom: 10px;">
+                <img :src="row.content" style="max-width: 200px; max-height: 200px;">
+              </div>
+              <span v-else>{{row.content}}</span>
+            </div>
+          </template>
+        </i-table>        
+      </div>
+
+    <Modal v-model="modalState" width="360" :closable="false" :mask-closable="false">
+      <template #header>
+        <p style="color:#f60;text-align:center">
+          <span>ERROR</span>
+        </p>
+      </template>
+      <div style="text-align:center">
+        <p>{{errorMessage}}</p>
+      </div>
+      <template #footer>
+        <i-button type="error" size="large" long @click="modalState = false">OK</i-button>
+      </template>
+    </Modal>
+
+  </body>
+
+</html>
+
+<script src="/public/vue.js"></script>
+<script src="/public/iview.js"></script>
+<link rel="stylesheet" href="/public/iview.css">
+<script>
+
+const app = Vue.createApp({
+  data () {
+    return {
+      imageFile: null,
+      imageURL: null,
+      loading: false,
+      result: null,
+
+      detectImageOrientation: false,
+      resultContainImages: true,
+
+      modalState: false,
+      errorMessage: ""
+    }
+  },
+  computed: {
+    columns() {
+      return [
+        {
+          title: 'Type',
+          key: 'type',
+          width: 100
+        },
+        {
+          title: 'Content',
+          key: 'content',
+          slot: 'content',
+          width: 400
+        }
+      ]
+    },
+    data() {
+      if (!this.result) {
+        return []
+      }
+      let str = ""
+      for (let item of this.result.data) {
+        if (item.type === 'ocr') {
+          if (item.confidence > 0.85) {
+            console.log('--->', item.text, item.confidence)
+            str += item.text
+          } else {
+            console.log('--->', item.text, item.confidence, '  [ignore]')
+          }
+        }
+      }
+      const find = (str, pattern) => {
+        if (pattern.test(str)) {
+          return RegExp.$1
+        }
+        return "---"
+      }
+      console.log(str)
+      let d = []
+
+      let name = find(str, /姓名(.+)性别/);
+      if (name === '---') {
+        name = find(str, /^(.+)姓名/);
+      }
+      d.push({type: '姓名', content: name})
+
+      d.push({type: '性别', content: find(str, /性别([男女])/)})
+
+      let ethnic = find(str, /民族(汉)/)
+      if (ethnic ===  '汉') {
+        d.push({type: '民族', content: '汉'})
+      } else {
+        d.push({type: '民族', content: find(str, /民族(.+)出/)})
+      }
+      
+      d.push({type: '出生', content: find(str, /生(\d{4}年\d\d?月\d\d?日)/)})
+
+      let address = find(str, /[住,佳]址(.+)公民身份/);
+      if (address.match(/(.+)(\d{17}[\dX])$/)) {
+        address = RegExp.$1
+      }
+      d.push({type: '住址', content: address})
+      d.push({type: '身份号码', content: find(str, /(\d{17}[\dX])/)})
+      d.push({type: '人像', content: this.faceImage})
+      d.push({type: '身份证', content: this.frontImage})
+      return d
+    },
+    faceImage() {
+      for (let item of this.result.data) {
+        if (item.type === 'face') {
+          return 'data:image/jpeg;base64,' + item.content
+        }
+      }
+    },
+    frontImage() {
+      for (let item of this.result.data) {
+        if (item.type === 'front') {
+          return 'data:image/jpeg;base64,' + item.content
+        }
+      }
+    }
+  },
+  methods: {
+
+    onSelectImage() {
+      var input = document.createElement('input');
+      input.type = 'file';
+      input.accept=".jpg, .jpeg, .png"
+      input.click();
+      input.onchange = e => { 
+        var file = e.target.files[0];
+        this.imageFile = file
+        if (this.imageURL) {
+          URL.revokeObjectURL(this.imageURL)
+        }
+        this.imageURL = URL.createObjectURL(file)
+        input.remove()
+        this.result = null
+      }
+    },
+
+    async onUpload() {
+      this.loading = true
+      let formData = new FormData();
+      formData.append('file', this.imageFile);
+      if (this.detectImageOrientation) {
+        formData.append('auto_detect_direction', this.detectImageOrientation);
+      }
+      if (this.resultContainImages) {
+        formData.append('result_include_image', this.resultContainImages);
+      }
+      let resp = await fetch("/api/upload",{ body: formData, method: "post"});
+      let result = await resp.json();
+      this.loading = false
+      if(result.result === 'success') {
+        this.result = result
+      } else {
+        this.modalState = true
+        this.errorMessage = result.error
+      }
+    }
+  }
+});
+app.use(ViewUIPlus);
+app.mount("#app");
+</script>
+
